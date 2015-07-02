@@ -1,0 +1,16 @@
+<html>
+<head>
+	<title>{{.Link}} - A Test Blog</title>
+</head>
+<body>
+	<h2><a href="{{.Link}}">{{.Name}}</a></h2>
+	<hr />
+	<div id="content">
+		{{range $n, $l := .Links}} <a href="{{$l}}">{{$n}}</a><br />{{end}}
+	</div>
+	<hr />
+	<div id="footer">
+		<p>You may use it as you wish</p>
+	</div>
+</body>
+</html>

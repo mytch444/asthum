@@ -3,27 +3,22 @@ package main
 import (
 	"io"
 	"os"
-	"flag"
-	"sort"
 	"log"
+	"flag"
 	"strings"
+	"net/url"
 	"net/http"
 	"os/exec"
 	"text/template"
 )
 
 const (
-	PageTemplateName = "PAGE.tmpl"
-	DirTemplateName = "DIR.tmpl"
+	PageTemplateName = ".PAGE.tmpl"
+	DirTemplateName = ".DIR.tmpl"
+	IndexPrefix = "index"
 )
 
-var hiddenNames []string = []string{
-	"PAGE.tmpl",
-	"DIR.tmpl",
-}
-
-var interpreter *string
-var port *string
+var interpreter, port *string
 var root string
 
 type TemplateData struct {
@@ -75,7 +70,7 @@ func findTemplate(path string, tmplName string) *template.Template {
 			if stringInList(tmplName, names) {
 				tmpl, err := template.ParseFiles(path[:i+1] + tmplName)
 				if err != nil {
-					log.Print("Error finding template: ", err)
+					log.Print("Error opening template " + path[:i+1] + tmplName + ": ", err)
 					return nil
 				} else {
 					return tmpl
@@ -87,126 +82,154 @@ func findTemplate(path string, tmplName string) *template.Template {
 	return nil
 }
 
-func processIndex(w http.ResponseWriter, file *os.File) {
-	fi, err := file.Stat()
-	if err != nil {
-		log.Print("Error stating index: ", err)
-		return
-	}
-	
-	if strings.Contains(fi.Mode().String(), "x") {
-		/* File executable */
-		cmd := exec.Command(file.Name())
-		output, err := cmd.Output()
-		if err != nil {
-			log.Print("Error executing: ", err)
-		} else {
-			io.WriteString(w, string(output))
-		}
-	} else {
-		/* File not executable */
-		io.Copy(w, file)
-	}
-}
-
-func processDir(w http.ResponseWriter, data *TemplateData, file *os.File, fi os.FileInfo) {
+func dirIndex(file *os.File) *os.File {
 	names, err := file.Readdirnames(0)
 	if err != nil {
-		io.WriteString(w, "Error reading dirnames for " + file.Name())
-		return
+		return nil
+	}
+	file.Seek(0, 0)
+		
+	for _, name := range names {
+		if strings.HasPrefix(name, IndexPrefix) {
+			f, err := os.Open(file.Name() + "/" + name)
+			if err == nil {
+				return f
+			}
+		}
 	}
 	
-	if !strings.HasSuffix(data.Link, "/") {
-		data.Link += "/"
+	return nil
+}
+
+func processDir(w http.ResponseWriter, data *TemplateData, file *os.File) {
+	file, err := os.Open(file.Name())
+	names, err := file.Readdirnames(-1)
+	if err != nil {
+		return
 	}
 	
 	data.Links = make(map[string]string)
-	sort.Strings(names)
 	
 	for _, name := range names {
-		if strings.HasPrefix(name, "index") {
-			in, err := os.Open(file.Name() + "/" + name)
-			if err == nil {
-				processIndex(w, in)
-				return
-			} else {
-				log.Print("Error opening index file: ", err)
-				return
-			}
-		} else if !stringInList(name, hiddenNames) {
-			n := strings.TrimSuffix(name, ".md")
-			data.Links[n] = data.Link + n
+		if ! strings.HasPrefix(name, ".") {
+			name = strings.TrimSuffix(name, ".md")
+			data.Links[name] = data.Link + name
 		}
 	}
 	
 	tmpl := findTemplate(file.Name(), DirTemplateName)
 	if tmpl == nil {
-		io.WriteString(w, "<html><head><title>" + fi.Name() + "</title></head><body>")
 		for name, link := range data.Links {
 			io.WriteString(w, "<a href=\"" + link + "\">" + name + "</a><br/>")
 		}
-		io.WriteString(w, "</body></html>")
 	} else {
 		tmpl.Execute(w, data)
 	}
 }
 
-func processPage(w http.ResponseWriter, data *TemplateData, file *os.File, fi os.FileInfo) {
-	data.Content = parseMarkdown(file)
+func executePage(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
+	values := link.Query()
 	
-	tmpl := findTemplate(file.Name(), PageTemplateName)
-	if tmpl == nil {
-		io.WriteString(w, "<html><head><title>" + data.Name + "</title></head><body>")
-		io.WriteString(w, data.Content)
-		io.WriteString(w, "</body></html>")
-	} else {
-		tmpl.Execute(w, data)
+	args := make([]string, len(values) + 1)
+	args[0] = file.Name()
+	
+	i := 1
+	for name, value := range values {
+		args[i] = name + "=" + value[0]
+		i++
+	}
+	
+	l := strings.LastIndex(file.Name(), "/")
+	dir := file.Name()[:l]
+	base := file.Name()[l:]
+	
+	cmd := exec.Command("." + base)
+	cmd.Stdout = w
+	cmd.Args = args
+	cmd.Dir = dir
+	
+	err := cmd.Run()
+	if err != nil {
+		log.Print("Error executing: ", file.Name(), err)
 	}
 }
 
-func handler(w http.ResponseWriter, req *http.Request) {
-	var file *os.File
-	var fi os.FileInfo
-	var err error
-	var path string
-	
-	path = root + req.URL.Path
-
-	fi, err = os.Stat(path)
+func processPage(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
+	fi, err := file.Stat()
 	if err != nil {
-		if !strings.HasSuffix(path, ".md") {
-			path += ".md"
-			fi, err = os.Stat(path)
-		}
-		
-		if err != nil {
-			io.WriteString(w, "Error stating " + path)
-			return
-		}
-	}
-
-	file, err = os.Open(path)
-	if err != nil {
-		io.WriteString(w, "Error opening " + path)
+		log.Print("Error stating: ", err)
 		return
 	}
-	defer file.Close()
 	
-	/* If they requested the markdown version then give them it */
-	if strings.HasSuffix(req.URL.Path, ".md") {
-		io.Copy(w, file)
+	if strings.Contains(fi.Mode().String(), "x") {
+		executePage(w, link, data, file)
+	} else {
+		data.Content = parseMarkdown(file)
+		tmpl := findTemplate(file.Name(), PageTemplateName)
+		if tmpl == nil {
+			io.WriteString(w, data.Content)
+		} else {
+			tmpl.Execute(w, data)
+		}
+	}
+}
+
+func processFile(w http.ResponseWriter, link *url.URL, file *os.File) {
+	fi, err := file.Stat()
+	if err != nil {
+		log.Print("Error stating: ", err)
 		return
 	}
 
 	data := new(TemplateData)
-	data.Link = req.URL.Path
+	data.Link = link.Path
 	data.Name = strings.TrimSuffix(fi.Name(), ".md")
-
+	
 	if fi.IsDir() {
-		processDir(w, data, file, fi)
-	} else {
-		processPage(w, data, file, fi)
+		index := dirIndex(file)
+		
+		if ! strings.HasSuffix(data.Link, "/") {
+			data.Link += "/"
+		}
+		
+		if index == nil {
+			processDir(w, data, file)
+			return
+		} else {
+			defer index.Close()
+			file = index
+		}
 	}
+	
+	processPage(w, link, data, file)
+}
+
+func handler(w http.ResponseWriter, req *http.Request) {
+	var file *os.File
+	var err error
+	
+	log.Print(req.URL.String())
+	
+	path := root + req.URL.Path
+
+	file, err = os.Open(path)
+	if err != nil {
+		path += ".md"
+		file, err = os.Open(path)
+		
+		if err != nil {
+			io.WriteString(w, "404: " + req.URL.Path)
+			return
+		}
+	}
+
+	if strings.HasSuffix(req.URL.Path, ".md") {
+		io.Copy(w, file)
+	} else {
+		processFile(w, req.URL, file)
+	
+	}
+	file.Close()
 }
 
 func main() {
