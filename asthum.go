@@ -223,7 +223,8 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if strings.HasSuffix(req.URL.Path, ".md") {
+	lsl := strings.LastIndex(req.URL.Path, "/")
+	if lsl > 0 && strings.Contains(req.URL.Path[lsl+1:], ".") {
 		io.Copy(w, file)
 	} else {
 		processFile(w, req.URL, file)
