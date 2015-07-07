@@ -223,8 +223,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	lsl := strings.LastIndex(req.URL.Path, "/")
-	if lsl > 0 && strings.Contains(req.URL.Path[lsl+1:], ".") {
+	if strings.Contains(req.URL.Path, ".") {
 		io.Copy(w, file)
 	} else {
 		processFile(w, req.URL, file)
