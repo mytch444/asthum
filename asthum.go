@@ -150,6 +150,7 @@ func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file 
 	
 	useTemplate, interpreter := findInterpreter(file.Name())
 	
+	
 	if len(interpreter) == 0 {
 		bytes, err = ioutil.ReadAll(file)
 	} else {
