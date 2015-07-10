@@ -20,8 +20,6 @@ content=$(markdown $file)
 
 echo "<div>$content</div>"
 
-echo "<a href="posts/">Archive</a>"
-
 if [ ! -z $prev ]; then
 	echo "<a href=\"index.sh?num=$prev\">Prev</a>"
 fi
