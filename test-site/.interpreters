@@ -5,6 +5,9 @@
 # interpreter and args are not needed. If they are not given then
 # the file is read out (possibly with a template around it).
 
+# Currently you must seperate the different things by ONE space
+# else bugs will occur.
+
 # suffix use-template interpreter args...
 
 # in template, parse with...
@@ -18,4 +21,4 @@ html yes
 # return raw, no template
 css no
 tar no
-gz  no
+gz no
