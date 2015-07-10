@@ -1,0 +1,21 @@
+# Due to the way the parse works if a line begins with something
+# other than a suffix it will be ignored.
+# So use '#' AT THE BEGINING OF A LINE as a comment.
+# use-template begins with either 'y' or 'n' and it is required.
+# interpreter and args are not needed. If they are not given then
+# the file is read out (possibly with a template around it).
+
+# suffix use-template interpreter args...
+
+# in template, parse with...
+md yes markdown
+sh yes sh
+py yes python
+
+# return raw, in template
+html yes
+
+# return raw, no template
+css no
+tar no
+gz  no

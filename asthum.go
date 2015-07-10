@@ -1,251 +1,248 @@
 package main
 
 import (
-	"io"
 	"os"
+	"io"
 	"log"
 	"flag"
 	"strings"
 	"net/url"
 	"net/http"
 	"os/exec"
+	"io/ioutil"
 	"text/template"
+	"html"
 )
-
-const (
-	PageTemplateName = ".PAGE.tmpl"
-	DirTemplateName = ".DIR.tmpl"
-	IndexPrefix = "index"
-)
-
-var interpreter, port *string
-var root string
 
 type TemplateData struct {
 	Name string
 	Link string
 	Content string
-	Links map[string]string
 }
 
-func stringInList(name string, list []string) bool {
-	for _, h := range list {
-		if h == name {
-			return true
-		}
-	}
-	return false
-}
+const (
+	PageTemplateName = ".page.tmpl"
+	InterpreterName = ".interpreters"
+)
 
-func parseMarkdown(file *os.File) string {
-	cmd := exec.Command(*interpreter)
-	cmd.Stdin = file
-	output, err := cmd.Output()
-	
-	if err != nil {
-		log.Print("Error parsing markdown: ", err)
-		return ""
+var siteRoot *string = flag.String("r", ".", "Path to files")
+var siteName *string = flag.String("n", "debug", "Name of the site # Will be suffixed to all pages")
+var serverPort *string = flag.String("p", "80", "Port to listen on")
+
+/*
+ * Split s on last occurence of pattern, so returns (most, suffix).
+ * If no matches of pattern were found then returns (s, "").
+ */
+func splitSuffix(s string, pattern string) (string, string) {
+	l := strings.LastIndex(s, pattern)
+	if l > 0 {
+		return s[:l], s[l+1:]
 	} else {
-		return string(output)
+		return s, ""
 	}
 }
 
-func findTemplate(path string, tmplName string) *template.Template {
-	path += "/"
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			file, err := os.Open(path[:i])
-			if err != nil {
-				log.Print("Error finding template: ", err)
-				return nil
-			}
-			
-			names, err := file.Readdirnames(0)
-			if err != nil {
-				continue
-			}
-			
-			file.Close()
-			
-			if stringInList(tmplName, names) {
-				tmpl, err := template.ParseFiles(path[:i+1] + tmplName)
-				if err != nil {
-					log.Print("Error opening template " + path[:i+1] + tmplName + ": ", err)
-					return nil
-				} else {
-					return tmpl
-				}
-			}
+func findFile(path string, name string) string {
+	for {
+		path, _ = splitSuffix(path, "/")
+		if path == "" {
+			return os.DevNull
+		}
+		p := path + "/" + name
+		_, err := os.Stat(p)
+		if err == nil {
+			return p
 		}
 	}
-
-	return nil
 }
 
-func dirIndex(file *os.File) *os.File {
+func dirIndex(file *os.File) string {
 	names, err := file.Readdirnames(0)
 	if err != nil {
-		return nil
+		return ""
 	}
 	file.Seek(0, 0)
+	
+	dir := file.Name()
+	if !strings.HasSuffix(dir, "/") {
+		dir += "/"
+	}
 		
 	for _, name := range names {
-		if strings.HasPrefix(name, IndexPrefix) {
-			f, err := os.Open(file.Name() + "/" + name)
-			if err == nil {
-				return f
-			}
+		if strings.HasPrefix(name, "index") {
+			return name
 		}
 	}
 	
-	return nil
+	return ""
 }
 
-func processDir(w http.ResponseWriter, data *TemplateData, file *os.File) {
-	file, err := os.Open(file.Name())
-	names, err := file.Readdirnames(-1)
+func readLine(file *os.File, bytes []byte) (string, error) {
+	n, err := file.Read(bytes)
 	if err != nil {
-		return
+		return "", err
 	}
 	
-	data.Links = make(map[string]string)
+	s := string(bytes[:n])
+	l := strings.IndexByte(s, '\n') + 1
 	
-	for _, name := range names {
-		if ! strings.HasPrefix(name, ".") {
-			name = strings.TrimSuffix(name, ".md")
-			data.Links[name] = data.Link + name
-		}
-	}
-	
-	tmpl := findTemplate(file.Name(), DirTemplateName)
-	if tmpl == nil {
-		for name, link := range data.Links {
-			io.WriteString(w, "<a href=\"" + link + "\">" + name + "</a><br/>")
-		}
+	if l > 0 {
+		file.Seek(int64(l - n), 1)
+		return s[:l-1], nil
 	} else {
-		tmpl.Execute(w, data)
+		return "", nil
 	}
 }
 
-func executePage(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
-	values := link.Query()
+func findInterpreter(path string) (bool, []string) {
+	intPath := findFile(path, InterpreterName)
+	if intPath == "" {
+		return false, []string{}
+	}
 	
-	args := make([]string, len(values) + 1)
-	args[0] = file.Name()
+	file, err := os.Open(intPath)
+	if err != nil {
+		log.Print(err)
+		return false, []string{}
+	}
 	
-	i := 1
+	_, suffix := splitSuffix(path, ".")
+	
+	bytes := make([]byte, 256)
+	
+	for {
+		line, err := readLine(file, bytes)
+		
+		if err != nil {
+			return false, []string{}
+		} else if strings.HasPrefix(line, suffix) {
+			parts := strings.Split(line, " ")
+			return strings.HasPrefix(parts[1], "y"), parts[2:]
+		}
+	}
+}
+
+func runInterpreter(interpreter []string, values map[string][]string, file *os.File) ([]byte, error) {
+	l := strings.LastIndex(file.Name(), "/")
+	dir := file.Name()[:l]
+	base := file.Name()[l+1:]
+	
+	l = len(interpreter) + len(values) + 1
+	args := make([]string, l)
+	copy(args, interpreter)
+	args[len(interpreter)] = base
+	
+	i := len(interpreter) + 1
 	for name, value := range values {
 		args[i] = name + "=" + value[0]
 		i++
 	}
 	
-	l := strings.LastIndex(file.Name(), "/")
-	dir := file.Name()[:l]
-	base := file.Name()[l:]
-	
-	cmd := exec.Command("." + base)
-	cmd.Stdout = w
+	cmd := exec.Command(interpreter[0])
 	cmd.Args = args
 	cmd.Dir = dir
-	
-	err := cmd.Run()
-	if err != nil {
-		log.Print("Error executing: ", file.Name(), err)
-	}
+	return cmd.Output()
 }
 
-func processPage(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
-	fi, err := file.Stat()
-	if err != nil {
-		log.Print("Error stating: ", err)
-		return
-	}
+func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
+	var err error
+	var bytes []byte
 	
-	if strings.Contains(fi.Mode().String(), "x") {
-		executePage(w, link, data, file)
+	useTemplate, interpreter := findInterpreter(file.Name())
+	
+	if len(interpreter) == 0 {
+		bytes, err = ioutil.ReadAll(file)
 	} else {
-		data.Content = parseMarkdown(file)
-		tmpl := findTemplate(file.Name(), PageTemplateName)
-		if tmpl == nil {
-			io.WriteString(w, data.Content)
-		} else {
-			tmpl.Execute(w, data)
-		}
+		bytes, err = runInterpreter(interpreter, link.Query(), file)
 	}
-}
-
-func processFile(w http.ResponseWriter, link *url.URL, file *os.File) {
-	fi, err := file.Stat()
+	
 	if err != nil {
-		log.Print("Error stating: ", err)
+		log.Print(err)
+		io.WriteString(w, "ERROR")
 		return
+	} else {
+		data.Content = string(bytes)
 	}
-
-	data := new(TemplateData)
-	data.Link = link.Path
-	data.Name = strings.TrimSuffix(fi.Name(), ".md")
 	
-	if fi.IsDir() {
-		index := dirIndex(file)
-		
-		if ! strings.HasSuffix(data.Link, "/") {
-			data.Link += "/"
-		}
-		
-		if index == nil {
-			processDir(w, data, file)
+	if useTemplate {
+		tmplPath := findFile(file.Name(), PageTemplateName)
+		tmpl, err := template.ParseFiles(tmplPath)
+		if err == nil {
+			tmpl.Execute(w, data)
 			return
-		} else {
-			defer index.Close()
-			file = index
 		}
 	}
 	
-	processPage(w, link, data, file)
+	/* No template/error opening template */
+	io.WriteString(w, data.Content)
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
 	var file *os.File
 	var err error
 	
-	log.Print(req.URL.String())
-	
-	path := root + req.URL.Path
+	path := "." + html.EscapeString(req.URL.Path)
 
 	file, err = os.Open(path)
 	if err != nil {
-		path += ".md"
-		file, err = os.Open(path)
-		
-		if err != nil {
-			io.WriteString(w, "404: " + req.URL.Path)
-			return
-		}
+		log.Print("404 ", path + " -- ", err)
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
+		return
+	}
+	defer file.Close()
+	
+	log.Print("request: ", path)
+
+	fi, err := file.Stat()
+	if err != nil {
+		log.Print(err)
+		return
 	}
 
-	if strings.Contains(req.URL.Path, ".") {
-		io.Copy(w, file)
-	} else {
-		processFile(w, req.URL, file)
+	data := new(TemplateData)
+	data.Link = req.URL.Path
 	
+	if path == "./" {
+		data.Name = *siteName
+	} else {
+		name, _ := splitSuffix(fi.Name(), ".")
+		data.Name = name + " # " + *siteName
 	}
-	file.Close()
+
+	if fi.IsDir() {
+		index := dirIndex(file)
+
+		if index == "" {
+			w.WriteHeader(http.StatusNotFound)
+			io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
+		} else {
+			/* Redirect to index */
+			url := req.URL.Path
+			if !strings.HasSuffix(url, "/") {
+				url += "/"
+			}
+			
+			url += index
+			
+			if req.URL.RawQuery != "" {
+				url += "?" + req.URL.RawQuery
+			}
+
+			http.Redirect(w, req, url, http.StatusSeeOther)
+		}
+	} else {
+		processFile(w, req.URL, data, file)
+	}
 }
 
 func main() {
-	interpreter = flag.String("m", "markdown", "Name/Path of/to executable used to parse markdown")
-	port = flag.String("p", "80", "Port to listen on")
-	
 	flag.Parse()
 	
-	if flag.NArg() > 0 {
-		root = flag.Args()[0]
-	} else {
-		root = "."
-	}
+	os.Chdir(*siteRoot)
 	
 	http.HandleFunc("/", handler)
-	err := http.ListenAndServe(":" + *port, nil)
+	err := http.ListenAndServe(":" + *serverPort, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

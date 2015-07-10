@@ -1,33 +1,46 @@
 # asthum #
 
-### A HTML Web Server That Uses Markdown ###
+### Simple Http Server That Converts Files ###
 
-Subtitle says what it does. Mostly.
+~~Subtitle says what it does. Mostly.~~
 
-Converts files from markdown with an interpreter (defaults to `markdown`, can be changed with `-m`).
+I have no idea what it does. You have no idea what it does. Nobodies happy.
 
-When processing a file or directory it will search upwards from the file looking for the first occurance of a `.PAGE.tmpl` file, which is expected to be a go text/template template. It is given the a struct with the following fields.
+It makes useage of go text/templates. At the moment it is in a state of flux and there is little purpose in me telling you how to use it.
 
-    Link
-    Name
-    Content
-
-They are all strings. Content is html derived from the parsed markdown.
-
-When directories are requested the directory is first searched for a file that begins with index. If it is found then that is returned the same as if that had been requested. If no index file was found then a list of subfiles (files begining with a period are not shown) is created. Then a template named `.DIR.tmpl` is searched for and given a struct with the following fields:
-
-    Link
-    Name
-    Links
-
-Link and Name are strings, Links is a map of string to string, it's key is the file name and this value is a link to that file.
-
-A special case with files occurs if they are executable (have a x in the mode string, it is not a very good way of checking but I could not think of anything better). If this is the case then the file is executed. If there was any query string in the url requested then the `key=value` pairs are given as arguemnts. The output is returned as the request.
-
-
-If the requested file name (the last section of the url path) contains a period then the raw file is returned. So if you have '/blog/hi.md' and they request that they get the raw markdown, but if they request '/blog/hi' they get the processed version. This is useful for other file types such as 'html' and tar archives as they will be returned without any processing.
-
-### Notes ###
+### Name ###
 
 Asthum comes from 'A HTML Web Server That Uses Markdown' -> 'ahwstum' -> 'asthum' : I'm horrible at coming up with names.
 
+### A Basic Idea Of What It Does ###
+
+Returns files or runs scripts that are requested. Also uses go `text/templates` to make coding a little less repedative.
+
+Files that begin with periods cannot be requested. `asthum` also has three special files names that it uses. These file file used is the first file that it find that matches the name when it looks up the directory tree starting from the path of the file requested. I hope that makes sense. These files are called:
+
+    .page.tmpl
+    .interpreters
+
+`.page.tmpl` is a template files that is (sometimes) used to template requested files.
+
+`.interpreters` is used to figure out whether to use a template and whether to return the file as is or to interpret it with a program first. It has a format like this:
+
+    filesuffix [yes|no] [interpreter] [args...]
+
+So for example if you wanted to use css and markdown files you would do something like this:
+
+    md yes markdown
+    css no
+
+There is an example file in `test-site/.interpreters`. In fact, you should probably just look in `test-site` for examples of everything.
+
+The template files executed with a struct like this:
+
+    Name string
+    Link string
+    Content string
+
+Hopefully you now know a little about how to use it.
+
+Check `-h` for arguments.
+ 
