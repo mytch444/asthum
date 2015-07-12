@@ -106,18 +106,25 @@ func findInterpreter(path string) (bool, []string) {
 		return false, []string{}
 	}
 	
-	_, suffix := splitSuffix(path, ".")
-	
 	bytes := make([]byte, 256)
 	
 	for {
 		line, err := readLine(file, bytes)
-		
 		if err != nil {
 			return false, []string{}
-		} else if strings.HasPrefix(line, suffix) {
+		} else if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		
+		suffix := strings.SplitN(line, " ", 2)
+		if len(suffix) > 0 && strings.HasSuffix(path, suffix[0]) {
 			parts := strings.Split(line, " ")
-			return strings.HasPrefix(parts[1], "y"), parts[2:]
+			if len(parts) < 2 {
+				log.Print("Error in interpreter file. ", path)
+				continue
+			} else {
+				return strings.HasPrefix(parts[1], "y"), parts[2:]
+			}
 		}
 	}
 }
@@ -149,7 +156,6 @@ func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file 
 	var bytes []byte
 	
 	useTemplate, interpreter := findInterpreter(file.Name())
-	
 	
 	if len(interpreter) == 0 {
 		bytes, err = ioutil.ReadAll(file)
@@ -193,7 +199,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer file.Close()
 	
-	log.Print("request: ", path)
+	log.Print(req.RemoteAddr, " request: ", path)
 
 	fi, err := file.Stat()
 	if err != nil {
