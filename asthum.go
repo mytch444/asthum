@@ -223,19 +223,20 @@ func handler(w http.ResponseWriter, req *http.Request) {
 			io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
 			return
 		} else {
-			if !strings.HasSuffix(path, "/") {
-				path += "/"
-			}
+			if strings.HasSuffix(path, "/") {
+				path += index
 			
-			path += index
-			
-			file, err = os.Open(path)
-			if err != nil {
-				log.Print(err)
-				return
+				file, err = os.Open(path)
+				if err != nil {
+					log.Print(err)
+					return
+				}
+				defer file.Close()
+				/* Fall through to process file */
+			} else {
+				url := req.URL.Scheme + req.URL.Path + "/" + req.URL.RawQuery
+				http.Redirect(w, req, url, http.StatusMovedPermanently)
 			}
-			defer file.Close()
-			/* Fall through to process file */
 		}
 	}
 	processFile(w, req.URL, data, file)
