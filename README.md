@@ -1,6 +1,6 @@
 # asthum #
 
-### Simple Http Server That Converts Files ###
+### Simple Http Server ###
 
 ~~Subtitle says what it does. Mostly.~~
 
@@ -12,11 +12,13 @@ It makes useage of go text/templates. At the moment it is in a state of flux and
 
 Asthum comes from 'A HTML Web Server That Uses Markdown' -> 'ahwstum' -> 'asthum' : I'm horrible at coming up with names.
 
+The name seems to have quickly become defunct.
+
 ### A Basic Idea Of What It Does ###
 
 Returns files or runs scripts that are requested. Also uses go `text/templates` to make coding a little less repedative.
 
-Files that begin with periods cannot be requested. `asthum` also has three special files names that it uses. These file file used is the first file that it find that matches the name when it looks up the directory tree starting from the path of the file requested. I hope that makes sense. These files are called:
+Files that begin with periods cannot be requested. `asthum` also has two special files names that it uses. The file used is the first file that it find that matches the name when it looks up the directory tree starting from the path of the file requested. I hope that makes sense. These files are called:
 
     .page.tmpl
     .interpreters
@@ -33,6 +35,8 @@ So for example if you wanted to use css and markdown files you would do somethin
     css no
 
 There is an example file in `test-site/.interpreters`. In fact, you should probably just look in `test-site` for examples of everything.
+
+When files are interpreted query strings are used to set values in the environment. Similar to CGI scripts.
 
 The template files executed with a struct like this:
 
