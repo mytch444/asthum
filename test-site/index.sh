@@ -1,19 +1,21 @@
-if [ -z $1 ]; then
-	num=`cat .posts | wc -l`
-else
-	num=`echo $1 | cut -d'=' -f2`
+num=$(cat .posts | wc -l)
+
+if [ -z $post ]; then
+	post=$num
+elif [ $post -gt $num ] || [ $post -lt 0 ]; then
+	echo "No such post"
+	exit
 fi
 
-last=`cat .posts | wc -l`
-if [ $num -lt $last ]; then
-	next=$(( $num + 1 ))
+if [ $post -lt $num ]; then
+	next=$(( $post + 1 ))
 fi
 
-if [ $num -gt 1 ]; then
-	prev=$(( $num - 1 ))
+if [ $post -gt 1 ]; then
+	prev=$(( $post - 1 ))
 fi
 
-file=`head -n$num .posts | tail -n1`
+file=`head -n$post .posts | tail -n1`
 
 name=$(basename $file | sed "s/\.md//")
 content=$(markdown $file)
@@ -21,10 +23,10 @@ content=$(markdown $file)
 echo "<div>$content</div>"
 
 if [ ! -z $prev ]; then
-	echo "<a href=\"index.sh?num=$prev\">Prev</a>"
+	echo "<a href=\"index.sh?post=$prev\">Prev</a>"
 fi
 if [ ! -z $next ]; then
-	echo "<a href=\"index.sh?num=$next\">Next</a>"
+	echo "<a href=\"index.sh?post=$next\">Next</a>"
 fi
 
 echo "</body></html>"

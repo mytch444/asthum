@@ -130,24 +130,22 @@ func findInterpreter(path string) (bool, []string) {
 }
 
 func runInterpreter(interpreter []string, values map[string][]string, file *os.File) ([]byte, error) {
-	l := strings.LastIndex(file.Name(), "/")
-	dir := file.Name()[:l]
-	base := file.Name()[l+1:]
+	dir, base := splitSuffix(file.Name(), "/")
+	cmd := exec.Command(interpreter[0])
+	cmd.Args = append(interpreter, base)
+	cmd.Dir = dir
 	
-	l = len(interpreter) + len(values) + 1
-	args := make([]string, l)
-	copy(args, interpreter)
-	args[len(interpreter)] = base
+	l := len(cmd.Env) + len(values) + 1
+	env := make([]string, l)
+	copy(env, cmd.Env)
 	
-	i := len(interpreter) + 1
+	i := len(cmd.Env) + 1
 	for name, value := range values {
-		args[i] = name + "=" + value[0]
+		env[i] = name + "=" + value[0]
 		i++
 	}
 	
-	cmd := exec.Command(interpreter[0])
-	cmd.Args = args
-	cmd.Dir = dir
+	cmd.Env = env
 	return cmd.Output()
 }
 
@@ -188,18 +186,18 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	var file *os.File
 	var err error
 	
+	log.Print(req.RemoteAddr, " request: ", req.URL.String())
+	
 	path := "." + html.EscapeString(req.URL.Path)
 
 	file, err = os.Open(path)
 	if err != nil {
-		log.Print("404 ", path + " -- ", err)
+		log.Print("404 ", err)
 		w.WriteHeader(http.StatusNotFound)
 		io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
 		return
 	}
 	defer file.Close()
-	
-	log.Print(req.RemoteAddr, " request: ", path)
 
 	fi, err := file.Stat()
 	if err != nil {
@@ -223,24 +221,24 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		if index == "" {
 			w.WriteHeader(http.StatusNotFound)
 			io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
+			return
 		} else {
-			/* Redirect to index */
-			url := req.URL.Path
-			if !strings.HasSuffix(url, "/") {
-				url += "/"
+			if !strings.HasSuffix(path, "/") {
+				path += "/"
 			}
 			
-			url += index
+			path += index
 			
-			if req.URL.RawQuery != "" {
-				url += "?" + req.URL.RawQuery
+			file, err = os.Open(path)
+			if err != nil {
+				log.Print(err)
+				return
 			}
-
-			http.Redirect(w, req, url, http.StatusSeeOther)
+			defer file.Close()
+			/* Fall through to process file */
 		}
-	} else {
-		processFile(w, req.URL, data, file)
 	}
+	processFile(w, req.URL, data, file)
 }
 
 func main() {
