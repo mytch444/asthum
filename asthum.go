@@ -20,7 +20,7 @@ type TemplateData struct {
 }
 
 const (
-	PageTemplateName = ".page.tmpl"
+	TemplateName = ".tmpl"
 	InterpreterName = ".interpreters"
 )
 
@@ -173,7 +173,7 @@ func processFile(w http.ResponseWriter, req *http.Request,
 	
 	if useTemplate {
 		data.Content = string(bytes)
-		tmplPath := findFile(file.Name(), PageTemplateName)
+		tmplPath := findFile(file.Name(), TemplateName)
 		tmpl, err := template.ParseFiles(tmplPath)
 		if err == nil {
 			tmpl.Execute(w, data)

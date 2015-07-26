@@ -20,10 +20,10 @@ Returns files or runs scripts that are requested. Also uses go `text/templates` 
 
 Files that begin with periods cannot be requested. `asthum` also has two special files names that it uses. The file used is the first file that it find that matches the name when it looks up the directory tree starting from the path of the file requested. I hope that makes sense. These files are called:
 
-    .page.tmpl
+    .tmpl
     .interpreters
 
-`.page.tmpl` is a template files that is (sometimes) used to template requested files.
+`.tmpl` is a template files that is (sometimes) used to template requested files.
 
 `.interpreters` is used to figure out whether to use a template and whether to return the file as is or to interpret it with a program first. It has a format like this:
 
