@@ -6,7 +6,6 @@ import (
 	"log"
 	"flag"
 	"strings"
-	"net/url"
 	"net/http"
 	"os/exec"
 	"io/ioutil"
@@ -26,7 +25,8 @@ const (
 )
 
 var siteRoot *string = flag.String("r", ".", "Path to files")
-var siteName *string = flag.String("n", "debug", "Name of the site # Will be suffixed to all pages")
+var siteName *string = flag.String("n", "debug", 
+		"Name of the site # Will be suffixed to all pages")
 var serverPort *string = flag.String("p", "80", "Port to listen on")
 
 /*
@@ -123,13 +123,15 @@ func findInterpreter(path string) (bool, []string) {
 				log.Print("Error in interpreter file. ", path)
 				continue
 			} else {
-				return strings.HasPrefix(parts[1], "y"), parts[2:]
+				return strings.HasPrefix(parts[1], "y"), 
+					parts[2:]
 			}
 		}
 	}
 }
 
-func runInterpreter(interpreter []string, values map[string][]string, file *os.File) ([]byte, error) {
+func runInterpreter(interpreter []string, 
+		values map[string][]string, file *os.File) ([]byte, error) {
 	dir, base := splitSuffix(file.Name(), "/")
 	cmd := exec.Command(interpreter[0])
 	cmd.Args = append(interpreter, base)
@@ -149,7 +151,8 @@ func runInterpreter(interpreter []string, values map[string][]string, file *os.F
 	return cmd.Output()
 }
 
-func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file *os.File) {
+func processFile(w http.ResponseWriter, req *http.Request,
+		data *TemplateData, file *os.File) {
 	var err error
 	var bytes []byte
 	
@@ -158,18 +161,18 @@ func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file 
 	if len(interpreter) == 0 {
 		bytes, err = ioutil.ReadAll(file)
 	} else {
-		bytes, err = runInterpreter(interpreter, link.Query(), file)
+		bytes, err = runInterpreter(interpreter, 
+				req.URL.Query(), file)
 	}
 	
 	if err != nil {
 		log.Print(err)
 		io.WriteString(w, "ERROR")
 		return
-	} else {
-		data.Content = string(bytes)
 	}
 	
 	if useTemplate {
+		data.Content = string(bytes)
 		tmplPath := findFile(file.Name(), PageTemplateName)
 		tmpl, err := template.ParseFiles(tmplPath)
 		if err == nil {
@@ -179,7 +182,8 @@ func processFile(w http.ResponseWriter, link *url.URL, data *TemplateData, file 
 	}
 	
 	/* No template/error opening template */
-	io.WriteString(w, data.Content)
+	req.ContentLength = int64(len(bytes))
+	w.Write(bytes)
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
@@ -220,26 +224,27 @@ func handler(w http.ResponseWriter, req *http.Request) {
 
 		if index == "" {
 			w.WriteHeader(http.StatusNotFound)
-			io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
+			io.WriteString(w, "404: " + 
+				html.EscapeString(req.URL.Path))
 			return
+		} else if !strings.HasSuffix(path, "/") {
+			url := req.URL.Scheme + req.URL.Path + 
+				"/" + req.URL.RawQuery
+			http.Redirect(w, req, url, 
+				http.StatusMovedPermanently)
 		} else {
-			if strings.HasSuffix(path, "/") {
-				path += index
-			
-				file, err = os.Open(path)
-				if err != nil {
-					log.Print(err)
-					return
-				}
-				defer file.Close()
-				/* Fall through to process file */
-			} else {
-				url := req.URL.Scheme + req.URL.Path + "/" + req.URL.RawQuery
-				http.Redirect(w, req, url, http.StatusMovedPermanently)
+			path += index
+			file, err = os.Open(path)
+			if err != nil {
+				log.Print(err)
+				return
 			}
+			defer file.Close()
+			/* Fall through to process file */
 		}
 	}
-	processFile(w, req.URL, data, file)
+	
+	processFile(w, req, data, file)
 }
 
 func main() {
