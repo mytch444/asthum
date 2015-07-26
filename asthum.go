@@ -193,6 +193,7 @@ func processFile(w http.ResponseWriter, req *http.Request,
 func handler(w http.ResponseWriter, req *http.Request) {
 	var file *os.File
 	var err error
+	var name string
 	
 	log.Print(req.RemoteAddr, " request: ", req.URL.String())
 	
@@ -216,10 +217,17 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	data := new(TemplateData)
 	data.Link = req.URL.Path
 	
+	if strings.HasPrefix(fi.Name(), "index") {
+		path, _ = splitSuffix(path, "/")
+		_, name = splitSuffix(path, "/")
+		path += "/"
+	} else {
+		name, _ = splitSuffix(fi.Name(), ".")
+	}
+	
 	if path == "./" {
 		data.Name = *rootName
 	} else {
-		name, _ := splitSuffix(fi.Name(), ".")
 		data.Name = fmt.Sprintf(*nameFormat, name)
 	}
 
