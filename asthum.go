@@ -4,6 +4,7 @@ import (
 	"os"
 	"io"
 	"log"
+	"fmt"
 	"flag"
 	"strings"
 	"net/http"
@@ -25,8 +26,11 @@ const (
 )
 
 var siteRoot *string = flag.String("r", ".", "Path to files")
-var siteName *string = flag.String("n", "debug", 
-		"Name of the site # Will be suffixed to all pages")
+var rootName *string = flag.String("n", "debug", 
+"Name given to template when / is requested")
+var nameFormat *string = flag.String("f", "%s - debug", 
+"String used by fmt to get name to give to template, one string is " + 
+"given for parsing, the name of the file less it's suffix.") 
 var serverPort *string = flag.String("p", "80", "Port to listen on")
 
 /*
@@ -213,10 +217,10 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	data.Link = req.URL.Path
 	
 	if path == "./" {
-		data.Name = *siteName
+		data.Name = *rootName
 	} else {
 		name, _ := splitSuffix(fi.Name(), ".")
-		data.Name = name + " # " + *siteName
+		data.Name = fmt.Sprintf(*nameFormat, name)
 	}
 
 	if fi.IsDir() {
