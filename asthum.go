@@ -9,7 +9,6 @@ import (
 	"strings"
 	"net/http"
 	"os/exec"
-	"io/ioutil"
 	"text/template"
 	"html"
 )
@@ -26,12 +25,19 @@ const (
 )
 
 var siteRoot *string = flag.String("r", ".", "Path to files")
+
 var rootName *string = flag.String("n", "debug", 
 "Name given to template when / is requested")
+
 var nameFormat *string = flag.String("f", "%s - debug", 
 "String used by fmt to get name to give to template, one string is " + 
 "given for parsing, the name of the file less it's suffix.") 
+
 var serverPort *string = flag.String("p", "80", "Port to listen on")
+
+var maxBytes *int = flag.Int("m", 2 * 1024 * 1024,
+"Max file size that will be given to templates. Also the chunk size " + 
+"that is read in before writing to the stream")
 
 /*
  * Split s on last occurence of pattern, so returns (most, suffix).
@@ -156,38 +162,54 @@ func runInterpreter(interpreter []string,
 }
 
 func processFile(w http.ResponseWriter, req *http.Request,
-		data *TemplateData, file *os.File) {
+		data *TemplateData, file *os.File, fi os.FileInfo) {
 	var err error
-	var bytes []byte
+	var bytes []byte = make([]byte, *maxBytes)
+	var n int
 	
 	useTemplate, interpreter := findInterpreter(file.Name())
 	
-	if len(interpreter) == 0 {
-		bytes, err = ioutil.ReadAll(file)
-	} else {
+	if len(interpreter) > 0 {
 		bytes, err = runInterpreter(interpreter, 
 				req.URL.Query(), file)
+		
+	} else {
+		n, err = file.Read(bytes)
 	}
-	
+
 	if err != nil {
 		log.Print(err)
 		io.WriteString(w, "ERROR")
 		return
 	}
-	
+		
 	if useTemplate {
-		data.Content = string(bytes)
 		tmplPath := findFile(file.Name(), TemplateName)
 		tmpl, err := template.ParseFiles(tmplPath)
 		if err == nil {
+			data.Content = string(bytes)
 			tmpl.Execute(w, data)
 			return
 		}
 	}
 	
 	/* No template/error opening template */
-	req.ContentLength = int64(len(bytes))
-	w.Write(bytes)
+	if len(interpreter) > 0 {
+		req.ContentLength = int64(len(bytes))
+		w.Write(bytes)
+	} else {
+		req.ContentLength = fi.Size()
+		log.Print("giving file, len: ", req.ContentLength)
+		for {
+			log.Print("giving bytes: ", n)
+			w.Write(bytes[:n])
+			n, err = file.Read(bytes)
+			if err != nil {
+				break
+			}
+		}
+	}
+	
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
@@ -256,7 +278,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	
-	processFile(w, req, data, file)
+	processFile(w, req, data, file, fi)
 }
 
 func main() {

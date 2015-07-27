@@ -1,14 +1,13 @@
-# Due to the way the parse works if a line begins with something
-# other than a suffix it will be ignored.
-# So use '#' AT THE BEGINING OF A LINE as a comment.
+# Use '#' AT THE BEGINING OF A LINE as a comment.
 # use-template begins with either 'y' or 'n' and it is required.
 # interpreter and args are not needed. If they are not given then
 # the file is read out (possibly with a template around it).
 
-# Currently you must seperate the different things by ONE space
-# else bugs will occur.
-
 # suffix use-template interpreter args...
+
+# suffix could match more than just the extention of a file name,
+# so long as it is the last part eg: index.md or dex.md or .md or md
+# would all be valid and match index.md.
 
 # in template, parse with...
 md yes markdown
@@ -20,5 +19,6 @@ html yes
 
 # return raw, no template
 css no
-tar no
 gz no
+tar no
+
