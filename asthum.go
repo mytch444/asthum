@@ -199,10 +199,11 @@ func processFile(w http.ResponseWriter, req *http.Request,
 		w.Write(bytes)
 	} else {
 		req.ContentLength = fi.Size()
-		log.Print("giving file, len: ", req.ContentLength)
 		for {
-			log.Print("giving bytes: ", n)
-			w.Write(bytes[:n])
+			_, err = w.Write(bytes[:n])
+			if err != nil {
+				break
+			}
 			n, err = file.Read(bytes)
 			if err != nil {
 				break
