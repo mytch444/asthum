@@ -221,6 +221,13 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	log.Print(req.RemoteAddr, " request: ", req.URL.String())
 	
 	path := "." + html.EscapeString(req.URL.Path)
+	
+	if strings.Contains(path, "/.") {
+		log.Print("requested dot file")
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, "404: " + html.EscapeString(req.URL.Path))
+		return
+	}
 
 	file, err = os.Open(path)
 	if err != nil {
