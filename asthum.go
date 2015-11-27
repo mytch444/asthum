@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"text/template"
 	"html"
+	"sync"
 )
 
 type TemplateData struct {
@@ -34,6 +35,12 @@ var nameFormat *string = flag.String("f", "%s - debug",
 "given for parsing, the name of the file less it's suffix.") 
 
 var serverPort *string = flag.String("p", "80", "Port to listen on")
+
+var serverPortTLS *string = flag.String("t", "0", "Port to listen on for TLS connections. Set to 0 to disable TLS.")
+
+var certFilePath *string = flag.String("c", "/dev/null", "Public TLS certificate.")
+
+var keyFilePath *string = flag.String("k", "/dev/null", "TLS key file.")
 
 var maxBytes *int = flag.Int("m", 2 * 1024 * 1024,
 "Max file size that will be given to templates. Also the chunk size " + 
@@ -290,13 +297,38 @@ func handler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	var wg sync.WaitGroup
+	
 	flag.Parse()
 	
 	os.Chdir(*siteRoot)
 	
 	http.HandleFunc("/", handler)
-	err := http.ListenAndServe(":" + *serverPort, nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
+	
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+
+		err := http.ListenAndServe(":" + *serverPort, nil)
+		if err != nil {
+			log.Fatal("ListenAndServe: ", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if *serverPortTLS == "0" {
+			return
+		}
+
+		err := http.ListenAndServeTLS(":" + *serverPortTLS, 
+			*certFilePath, *keyFilePath, nil)
+		if err != nil {
+			log.Fatal("ListenAndServeTLS: ", err)
+		}
+	}()
+
+	wg.Wait()
 }
