@@ -1,0 +1,19 @@
+# This is a comment
+# The hash must be the first character in the line.
+# The first word is the patten to match the file name.
+# After that you can say the file/directory is hidden:
+
+hidden hidden
+# This will hide hidden and anything under it (if it is a 
+# directory)
+
+# Or give a program to interpret it
+
+.*\.py python
+
+# Or tell it to use a template (and give the interpreter if 
+# you want.)
+
+.*\.md templated discount
+
+# You can give arguments to the program also
