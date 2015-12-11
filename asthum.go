@@ -154,7 +154,6 @@ func readRules(path string) (bool, bool, []string) {
 	interpreter := []string{}
 	
 	parts := strings.Split(path, "/")
-//	name := parts[len(parts) - 1]
 	
 	spath := "./"
 
@@ -365,7 +364,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		name, _ = splitSuffix(fi.Name(), ".")
 	}
 	
-	if path == "./" {
+	if path == "/" {
 		data.Name = *siteName
 	} else {
 		data.Name = fmt.Sprintf(*nameFormat, name, *siteName)
