@@ -48,7 +48,7 @@ var certFilePath *string = flag.String("c", "/dev/null",
 var keyFilePath *string = flag.String("k", "/dev/null", 
 	"TLS key file.")
 
-var maxBytes *int = flag.Int("m", 2 * 1024 * 1024,
+var maxBytes *int = flag.Int("m", 1024 * 1024,
 	"Max file size that will be given to templates. Also the chunk size " + 
 	"that is read in before writing to the stream")
 
@@ -219,6 +219,7 @@ func processFile(w http.ResponseWriter, req *http.Request,
 		data *TemplateData, file *os.File, fi os.FileInfo) {
 	var err error
 	var bytes []byte
+	var n int
 	
 	hidden, templated, interpreter := readRules(file.Name())
 
@@ -232,9 +233,10 @@ func processFile(w http.ResponseWriter, req *http.Request,
 	if len(interpreter) > 0 {
 		bytes, err = runInterpreter(interpreter, 
 				req.URL.Query(), file)
+		n = len(bytes)
 	} else {
-		bytes = make([]byte, fi.Size())
-		_, err = file.Read(bytes)
+		bytes = make([]byte, *maxBytes)
+		n, err = file.Read(bytes)
 	}
 
 	if err != nil {
@@ -246,9 +248,9 @@ func processFile(w http.ResponseWriter, req *http.Request,
 	}
 
 	if templated {
-		processTemplatedData(w, req, data, bytes)
+		processTemplatedData(w, req, data, bytes[:n])
 	} else {
-		processRawData(w, req, bytes)
+		processRawData(w, req, bytes, n, fi.Size(), file)
 	}
 }
 
@@ -272,9 +274,21 @@ func processTemplatedData(w http.ResponseWriter, req *http.Request,
 	}
 }
 
-func processRawData(w http.ResponseWriter, req *http.Request, bytes []byte) {
-	req.ContentLength = int64(len(bytes))
-	w.Write(bytes)
+func processRawData(w http.ResponseWriter, req *http.Request, 
+		bytes []byte, n int, size int64, file *os.File) {
+	var err error
+	req.ContentLength = size
+
+	for {
+		_, err = w.Write(bytes[:n])
+		if err != nil {
+			break
+		}
+		n, err = file.Read(bytes)
+		if err != nil {
+			break
+		}
+	}
 }
 
 func findDirIndex(req string) string {
