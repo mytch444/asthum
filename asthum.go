@@ -36,11 +36,11 @@ var nameFormat *string = flag.String("f", "%s - %s",
 	"String used by fmt to get name to give to template." +
 	"The first substitution is the page name, second the site name.")
 
-var serverPortNormal *string = flag.String("p", "80", 
-	"Port to listen on for normal connections. Set to 0 to disable.")
+var serverListenPlain *string = flag.String("p", ":80", 
+	"Address to listen on for normal connections. Set to '' to disable.")
 
-var serverPortTLS *string = flag.String("t", "0", 
-	"Port to listen on for TLS connections. Set to 0 to disable.")
+var serverListenTLS *string = flag.String("t", "", 
+	"Address to listen on for TLS connections. Set to '' to disable.")
 
 var certFilePath *string = flag.String("c", "/dev/null", 
 	"TLS certificate.")
@@ -404,11 +404,11 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		if *serverPortNormal == "0" {
+		if *serverListenPlain == "" {
 			return
 		}
 		
-		err := http.ListenAndServe(":" + *serverPortNormal, nil)
+		err := http.ListenAndServe(*serverListenPlain, nil)
 		if err != nil {
 			log.Fatal("ListenAndServe: ", err)
 		}
@@ -417,11 +417,11 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		if *serverPortTLS == "0" {
+		if *serverListenTLS == "" {
 			return
 		}
 
-		err := http.ListenAndServeTLS(":" + *serverPortTLS, 
+		err := http.ListenAndServeTLS(*serverListenTLS, 
 			*certFilePath, *keyFilePath, nil)
 		if err != nil {
 			log.Fatal("ListenAndServeTLS: ", err)
